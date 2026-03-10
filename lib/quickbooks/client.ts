@@ -1,4 +1,7 @@
 import OAuthClient from "intuit-oauth";
+import { db } from "@/lib/db";
+import { qbTokens } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export function createOAuthClient() {
   return new OAuthClient({
@@ -9,15 +12,7 @@ export function createOAuthClient() {
   });
 }
 
-// Token storage — in production use DB
-let tokenStore: {
-  access_token?: string;
-  refresh_token?: string;
-  realmId?: string;
-  expires_at?: number;
-} = {};
-
-export function saveTokens(tokenResponse: {
+export async function saveTokens(tokenResponse: {
   token: {
     access_token: string;
     refresh_token: string;
@@ -25,23 +20,33 @@ export function saveTokens(tokenResponse: {
     expires_in: number;
   };
 }) {
-  tokenStore = {
-    access_token: tokenResponse.token.access_token,
-    refresh_token: tokenResponse.token.refresh_token,
-    realmId: tokenResponse.token.realmId,
-    expires_at: Date.now() + tokenResponse.token.expires_in * 1000,
-  };
+  const { access_token, refresh_token, realmId, expires_in } = tokenResponse.token;
+  const expiresAt = Date.now() + expires_in * 1000;
+
+  await db
+    .insert(qbTokens)
+    .values({ realmId, accessToken: access_token, refreshToken: refresh_token, expiresAt })
+    .onConflictDoUpdate({
+      target: qbTokens.realmId,
+      set: {
+        accessToken: access_token,
+        refreshToken: refresh_token,
+        expiresAt,
+        updatedAt: new Date(),
+      },
+    });
 }
 
-export function getTokens() {
-  return tokenStore;
+export async function getTokens() {
+  const rows = await db.select().from(qbTokens).limit(1);
+  return rows[0] ?? null;
 }
 
-export function isConnected() {
-  return !!(tokenStore.access_token && tokenStore.realmId);
+export async function isConnected() {
+  const token = await getTokens();
+  return !!token;
 }
 
-export function isTokenExpired() {
-  if (!tokenStore.expires_at) return true;
-  return Date.now() >= tokenStore.expires_at - 60_000;
+export function isTokenExpired(token: { expiresAt: number }) {
+  return Date.now() >= token.expiresAt - 60_000;
 }

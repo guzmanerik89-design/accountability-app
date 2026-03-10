@@ -7,7 +7,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const authResponse = await oauthClient.createToken(url);
-    saveTokens(authResponse);
+    await saveTokens(authResponse);
     return NextResponse.redirect(new URL("/quickbooks", req.url));
   } catch (error) {
     console.error("QB OAuth error:", error);

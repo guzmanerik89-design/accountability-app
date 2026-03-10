@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { createOAuthClient, isConnected, getTokens } from "@/lib/quickbooks/client";
+import OAuthClient from "intuit-oauth";
 
-// GET /api/quickbooks — get auth URL or connection status
 export async function GET() {
-  const connected = isConnected();
+  const connected = await isConnected();
   if (connected) {
-    const tokens = getTokens();
-    return NextResponse.json({ connected: true, realmId: tokens.realmId });
+    const tokens = await getTokens();
+    return NextResponse.json({ connected: true, realmId: tokens?.realmId });
   }
 
   const oauthClient = createOAuthClient();
@@ -20,8 +20,5 @@ export async function GET() {
     state: "qb-connect",
   });
 
-  return NextResponse.json({ connected: false, authUri });
+  return NextResponse.redirect(authUri);
 }
-
-// Import OAuthClient for scopes
-import OAuthClient from "intuit-oauth";

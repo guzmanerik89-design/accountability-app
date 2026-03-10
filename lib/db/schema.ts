@@ -8,6 +8,9 @@ import {
   date,
   uniqueIndex,
   pgEnum,
+  bigint,
+  jsonb,
+  unique,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -103,6 +106,32 @@ export const billingRelations = relations(billing, ({ one }) => ({
   }),
 }));
 
+// QuickBooks OAuth tokens (persisted in DB for serverless)
+export const qbTokens = pgTable("qb_tokens", {
+  id: serial("id").primaryKey(),
+  realmId: text("realm_id").notNull().unique(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token").notNull(),
+  expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// QuickBooks cached API responses
+export const qbCache = pgTable(
+  "qb_cache",
+  {
+    id: serial("id").primaryKey(),
+    realmId: text("realm_id").notNull(),
+    dataKey: text("data_key").notNull(),
+    payload: jsonb("payload").notNull(),
+    syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  },
+  (t) => [unique().on(t.realmId, t.dataKey)]
+);
+
+export type QbToken = typeof qbTokens.$inferSelect;
+export type QbCache = typeof qbCache.$inferSelect;
 export type Client = typeof clients.$inferSelect;
 export type NewClient = typeof clients.$inferInsert;
 export type Task = typeof tasks.$inferSelect;
