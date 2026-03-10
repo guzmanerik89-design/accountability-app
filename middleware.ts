@@ -1,16 +1,10 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { NextRequest, NextResponse } from "next/server";
+import { verifySession, COOKIE_NAME } from "@/lib/auth";
 
 export async function middleware(req: NextRequest) {
-  const token = await getToken({
-    req,
-    secret: process.env.NEXTAUTH_SECRET,
-  });
-
   const { pathname } = req.nextUrl;
 
-  // Allow auth-related routes
+  // Public routes
   if (
     pathname.startsWith("/login") ||
     pathname.startsWith("/api/auth") ||
@@ -20,11 +14,15 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Redirect to login if not authenticated
+  // Check session cookie
+  const token = req.cookies.get(COOKIE_NAME)?.value;
   if (!token) {
-    const loginUrl = new URL("/login", req.url);
-    loginUrl.searchParams.set("callbackUrl", req.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/login", req.url));
+  }
+
+  const session = await verifySession(token);
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   return NextResponse.next();

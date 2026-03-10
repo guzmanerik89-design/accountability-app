@@ -21,6 +21,7 @@
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
     "intuit-oauth": "^4.2.2",
+    "jose": "^6.2.1",
     "lucide-react": "^0.577.0",
     "next": "16.1.6",
     "next-auth": "^4.24.13",

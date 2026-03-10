@@ -1,6 +1,5 @@
 "use client";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,16 +17,25 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setError("");
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
-    if (res?.error) {
-      setError("Invalid email or password");
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (res.ok) {
+        router.push("/");
+        router.refresh();
+      } else {
+        const data = await res.json();
+        setError(data.error || "Invalid email or password");
+      }
+    } catch {
+      setError("Connection error. Please try again.");
+    } finally {
       setLoading(false);
-    } else {
-      router.push("/");
     }
   };
 
@@ -74,11 +82,11 @@ export default function LoginPage() {
                 />
               </div>
               {error && (
-                <p className="text-red-400 text-sm text-center">{error}</p>
+                <p className="text-red-400 text-sm text-center bg-red-900/20 border border-red-800 rounded-lg p-2">{error}</p>
               )}
               <Button
                 type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700"
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium"
                 disabled={loading}
               >
                 {loading ? "Signing in..." : "Sign In"}
