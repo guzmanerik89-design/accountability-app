@@ -5,36 +5,45 @@ import { QBDashboard } from "@/components/dashboard/quickbooks/QBDashboard";
 
 export const dynamic = "force-dynamic";
 
-export default async function QuickBooksPage() {
-  // Check connection
-  const tokens = await db.select().from(qbTokens).limit(1);
-  const connected = tokens.length > 0;
+export default async function QuickBooksPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ realmId?: string }>;
+}) {
+  const { realmId: selectedRealmId } = await searchParams;
 
-  if (!connected) {
+  // Load all connected companies
+  const allTokens = await db.select().from(qbTokens);
+
+  if (allTokens.length === 0) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">QuickBooks</h1>
-          <p className="text-slate-500 mt-1">Connect your QuickBooks Online account</p>
+          <p className="text-slate-500 mt-1">Conecta tu cuenta de QuickBooks Online</p>
         </div>
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center">
           <div className="text-4xl mb-3">📊</div>
-          <h2 className="font-semibold text-slate-800 mb-2">Not Connected</h2>
-          <p className="text-slate-500 text-sm mb-4">Connect QuickBooks to sync P&amp;L, Balance Sheet, Invoices and more.</p>
+          <h2 className="font-semibold text-slate-800 mb-2">Sin conexión</h2>
+          <p className="text-slate-500 text-sm mb-4">Conecta QuickBooks para sincronizar P&L, Balance General, Facturas y más.</p>
           <a
-            href="/api/quickbooks"
+            href="/api/quickbooks/connect"
             className="inline-flex items-center gap-2 bg-[#2CA01C] hover:bg-[#249016] text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors"
           >
-            Connect QuickBooks Online
+            Conectar QuickBooks Online
           </a>
         </div>
       </div>
     );
   }
 
-  // Load cached data
-  const realmId = tokens[0].realmId;
-  const cacheRows = await db.select().from(qbCache).where(eq(qbCache.realmId, realmId));
+  // Determine active realmId
+  const activeRealmId = (selectedRealmId && allTokens.find((t) => t.realmId === selectedRealmId))
+    ? selectedRealmId
+    : allTokens[0].realmId;
+
+  // Load cached data for the active company
+  const cacheRows = await db.select().from(qbCache).where(eq(qbCache.realmId, activeRealmId));
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cacheMap: Record<string, { payload: any; syncedAt: string }> = {};
@@ -45,25 +54,44 @@ export default async function QuickBooksPage() {
     };
   }
 
-  const lastSynced = cacheRows.length > 0
-    ? cacheRows.sort((a, b) => b.syncedAt.getTime() - a.syncedAt.getTime())[0].syncedAt.toISOString()
-    : undefined;
+  const lastSynced =
+    cacheRows.length > 0
+      ? cacheRows.sort((a, b) => b.syncedAt.getTime() - a.syncedAt.getTime())[0].syncedAt.toISOString()
+      : undefined;
 
-  // Extract company info
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const companyInfo = (cacheMap.company?.payload as any)?.CompanyInfo;
 
+  // Build company list for the selector (name comes from cache if available)
+  const companySummaries = await Promise.all(
+    allTokens.map(async (t) => {
+      const compRow = await db
+        .select()
+        .from(qbCache)
+        .where(eq(qbCache.realmId, t.realmId))
+        .limit(1);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cInfo = compRow.find((r) => r.dataKey === "company")?.payload as any;
+      return {
+        realmId: t.realmId,
+        name: cInfo?.CompanyInfo?.CompanyName ?? `Empresa (${t.realmId.slice(-6)})`,
+      };
+    })
+  );
+
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">QuickBooks Dashboard</h1>
-          <p className="text-slate-500 mt-1">
-            {companyInfo?.CompanyName ?? "Connected"} — read-only sync
-          </p>
-        </div>
-        <QBDashboard cache={cacheMap} lastSynced={lastSynced} companyInfo={companyInfo} />
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900">QuickBooks Dashboard</h1>
+        <p className="text-slate-500 mt-1">Datos sincronizados desde QuickBooks Online — solo lectura</p>
       </div>
+      <QBDashboard
+        cache={cacheMap}
+        lastSynced={lastSynced}
+        companyInfo={companyInfo}
+        activeRealmId={activeRealmId}
+        companies={companySummaries}
+      />
     </div>
   );
 }

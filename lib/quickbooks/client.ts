@@ -37,9 +37,17 @@ export async function saveTokens(tokenResponse: {
     });
 }
 
-export async function getTokens() {
+export async function getTokens(realmId?: string) {
+  if (realmId) {
+    const rows = await db.select().from(qbTokens).where(eq(qbTokens.realmId, realmId)).limit(1);
+    return rows[0] ?? null;
+  }
   const rows = await db.select().from(qbTokens).limit(1);
   return rows[0] ?? null;
+}
+
+export async function getAllTokens() {
+  return db.select().from(qbTokens);
 }
 
 export async function isConnected() {

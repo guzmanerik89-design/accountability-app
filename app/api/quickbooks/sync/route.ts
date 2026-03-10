@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createOAuthClient, getTokens, saveTokens, isTokenExpired } from "@/lib/quickbooks/client";
 import { db } from "@/lib/db";
 import { qbCache } from "@/lib/db/schema";
@@ -34,9 +34,12 @@ function qbCall<T>(qb: any, method: string, ...args: unknown[]): Promise<T> {
 const today = () => new Date().toISOString().split("T")[0];
 const fiscalStart = () => `${new Date().getFullYear()}-01-01`;
 
-export async function POST() {
+export async function POST(req: NextRequest) {
   try {
-    let tokens = await getTokens();
+    let body: { realmId?: string } = {};
+    try { body = await req.json(); } catch { /* no body */ }
+
+    let tokens = await getTokens(body.realmId);
     if (!tokens) return NextResponse.json({ error: "Not connected to QuickBooks" }, { status: 401 });
 
     // Refresh token if expired
