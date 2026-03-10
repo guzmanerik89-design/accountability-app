@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { qbTokens, qbCache } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { QBDashboard } from "@/components/dashboard/quickbooks/QBDashboard";
 
 export const dynamic = "force-dynamic";
@@ -62,16 +62,16 @@ export default async function QuickBooksPage({
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const companyInfo = (cacheMap.company?.payload as any)?.CompanyInfo;
 
-  // Build company list for the selector (name comes from cache if available)
+  // Build company list for the selector (name comes from cache company row)
   const companySummaries = await Promise.all(
     allTokens.map(async (t) => {
-      const compRow = await db
+      const [compRow] = await db
         .select()
         .from(qbCache)
-        .where(eq(qbCache.realmId, t.realmId))
+        .where(and(eq(qbCache.realmId, t.realmId), eq(qbCache.dataKey, "company")))
         .limit(1);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const cInfo = compRow.find((r) => r.dataKey === "company")?.payload as any;
+      const cInfo = compRow?.payload as any;
       return {
         realmId: t.realmId,
         name: cInfo?.CompanyInfo?.CompanyName ?? `Empresa (${t.realmId.slice(-6)})`,
