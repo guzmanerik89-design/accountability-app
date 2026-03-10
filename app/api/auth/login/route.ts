@@ -5,10 +5,10 @@ export async function POST(req: NextRequest) {
   try {
     const { email, password } = await req.json();
 
-    if (
-      email !== process.env.ADMIN_EMAIL ||
-      password !== process.env.ADMIN_PASSWORD
-    ) {
+    const adminEmail = (process.env.ADMIN_EMAIL || "").trim();
+    const adminPassword = (process.env.ADMIN_PASSWORD || "").trim();
+
+    if (email.trim() !== adminEmail || password !== adminPassword) {
       return NextResponse.json(
         { error: "Invalid email or password" },
         { status: 401 }
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
       path: "/",
     });
     return res;
-  } catch {
-    return NextResponse.json({ error: "Server error" }, { status: 500 });
+  } catch (err) {
+    console.error("Login error:", err);
+    return NextResponse.json({ error: "Server error", detail: String(err) }, { status: 500 });
   }
 }
