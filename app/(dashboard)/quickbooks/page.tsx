@@ -8,9 +8,9 @@ export const dynamic = "force-dynamic";
 export default async function QuickBooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ realmId?: string }>;
+  searchParams: Promise<{ realmId?: string; error?: string }>;
 }) {
-  const { realmId: selectedRealmId } = await searchParams;
+  const { realmId: selectedRealmId, error: oauthError } = await searchParams;
 
   // Load all connected companies
   const allTokens = await db.select().from(qbTokens);
@@ -60,7 +60,7 @@ export default async function QuickBooksPage({
       : undefined;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const companyInfo = (cacheMap.company?.payload as any)?.CompanyInfo;
+  const companyInfo = cacheMap.company?.payload as any;
 
   // Build company list for the selector (name comes from cache company row)
   const companySummaries = await Promise.all(
@@ -74,7 +74,7 @@ export default async function QuickBooksPage({
       const cInfo = compRow?.payload as any;
       return {
         realmId: t.realmId,
-        name: cInfo?.CompanyInfo?.CompanyName ?? `Empresa (${t.realmId.slice(-6)})`,
+        name: cInfo?.CompanyName ?? `Empresa (${t.realmId.slice(-6)})`,
       };
     })
   );
@@ -85,6 +85,11 @@ export default async function QuickBooksPage({
         <h1 className="text-2xl font-bold text-slate-900">QuickBooks Dashboard</h1>
         <p className="text-slate-500 mt-1">Datos sincronizados desde QuickBooks Online — solo lectura</p>
       </div>
+      {oauthError && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-3 text-sm text-red-700">
+          <strong>Error al conectar empresa:</strong> {decodeURIComponent(oauthError)}
+        </div>
+      )}
       <QBDashboard
         cache={cacheMap}
         lastSynced={lastSynced}
