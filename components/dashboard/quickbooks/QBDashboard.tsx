@@ -1,5 +1,7 @@
 "use client";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { QBSyncButton } from "./QBSyncButton";
 import { QBPnL, QBPnLDetailed } from "./QBPnL";
@@ -9,6 +11,8 @@ import { QBAccounts } from "./QBAccounts";
 import { QB1099Vendors } from "./QB1099Vendors";
 import { QBTaxReadiness } from "./QBTaxReadiness";
 import { QBIndustryKPIs } from "./QBIndustryKPIs";
+import { QBPeriodSelector } from "./QBPeriodSelector";
+import type { DateRange } from "./QBPeriodSelector";
 import {
   formatCurrency,
   parsePnLSummary,
@@ -60,6 +64,42 @@ export function QBDashboard({ cache, lastSynced, companyInfo, activeRealmId, com
   const router = useRouter();
   const hasData = Object.keys(cache).length > 0;
 
+  // Period selector state
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [customPnl, setCustomPnl] = useState<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [customBs, setCustomBs] = useState<any>(null);
+  const [periodLabel, setPeriodLabel] = useState<string>("");
+  const [periodLoading, setPeriodLoading] = useState(false);
+
+  const handlePeriodChange = useCallback(async (range: DateRange) => {
+    setPeriodLoading(true);
+    setPeriodLabel(range.label);
+    try {
+      const params = new URLSearchParams({
+        realmId: activeRealmId,
+        startDate: range.startDate,
+        endDate: range.endDate,
+      });
+      const [pnlRes, bsRes] = await Promise.allSettled([
+        fetch(`/api/quickbooks/report?report=pnl&${params}`).then((r) => r.json()),
+        fetch(`/api/quickbooks/report?report=balance_sheet&${params}`).then((r) => r.json()),
+      ]);
+      setCustomPnl(pnlRes.status === "fulfilled" && !pnlRes.value.error ? pnlRes.value.data : null);
+      setCustomBs(bsRes.status === "fulfilled" && !bsRes.value.error ? bsRes.value.data : null);
+    } catch {
+      toast.error("Error al cargar reportes del período");
+      setCustomPnl(null);
+      setCustomBs(null);
+    } finally {
+      setPeriodLoading(false);
+    }
+  }, [activeRealmId]);
+
+  // Use custom data if available, otherwise cache
+  const activePnlPayload = customPnl || cache.pnl?.payload;
+  const activeBsPayload = customBs || cache.balance_sheet?.payload;
+
   // Company profile
   const profile = parseCompanyProfile(companyInfo);
   const companyName = profile.companyName || companies.find((c) => c.realmId === activeRealmId)?.name || "Empresa";
@@ -67,16 +107,16 @@ export function QBDashboard({ cache, lastSynced, companyInfo, activeRealmId, com
   // P&L
   let pnlSummary = null;
   let pnlPeriod = "";
-  if (cache.pnl?.payload) {
-    pnlSummary = parsePnLSummary(cache.pnl.payload);
+  if (activePnlPayload) {
+    pnlSummary = parsePnLSummary(activePnlPayload);
     if (pnlSummary.startDate && pnlSummary.endDate) pnlPeriod = `${pnlSummary.startDate} → ${pnlSummary.endDate}`;
   }
 
   // Balance Sheet
-  const bsSummary = cache.balance_sheet?.payload ? parseBalanceSheet(cache.balance_sheet.payload) : null;
+  const bsSummary = activeBsPayload ? parseBalanceSheet(activeBsPayload) : null;
 
   // Entity insights
-  const entityInsights = parsePnLEntityInsights(cache.pnl?.payload, cache.accounts?.payload, profile.entityType);
+  const entityInsights = parsePnLEntityInsights(activePnlPayload, cache.accounts?.payload, profile.entityType);
 
   // Equity breakdown
   const equityBreakdown = parseEquityBreakdown(cache.accounts?.payload, profile.entityType);
@@ -192,11 +232,24 @@ export function QBDashboard({ cache, lastSynced, companyInfo, activeRealmId, com
 
       {hasData && (
         <>
+          {/* Period Selector */}
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <h4 className="text-sm font-semibold text-slate-700">Período de Reportes</h4>
+              {periodLabel && (
+                <span className="text-xs px-2 py-0.5 bg-[#2CA01C]/10 text-[#2CA01C] rounded-full font-medium">
+                  {periodLabel}
+                </span>
+              )}
+            </div>
+            <QBPeriodSelector onPeriodChange={handlePeriodChange} loading={periodLoading} />
+          </div>
+
           {/* KPI Cards */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             {[
               {
-                label: "Ingreso Neto (YTD)",
+                label: periodLabel ? `Ingreso Neto (${periodLabel})` : "Ingreso Neto (YTD)",
                 value: pnlSummary ? formatCurrency(pnlSummary.netIncome) : "—",
                 color: pnlSummary && pnlSummary.netIncome >= 0
                   ? "bg-green-50 border-green-100 text-green-900"
@@ -309,22 +362,22 @@ export function QBDashboard({ cache, lastSynced, companyInfo, activeRealmId, com
 
             <TabsContent value="pnl" className="mt-4">
               <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <ReportHeader company={companyName} title="Estado de Resultados — Año en Curso" period={pnlPeriod} entityType={profile.entityType} taxForm={profile.taxForm} />
-                <QBPnL payload={cache.pnl?.payload} entityType={profile.entityType} entityInsights={entityInsights} />
+                <ReportHeader company={companyName} title={periodLabel ? `Estado de Resultados — ${periodLabel}` : "Estado de Resultados — Año en Curso"} period={pnlPeriod} entityType={profile.entityType} taxForm={profile.taxForm} />
+                {periodLoading ? <LoadingReport /> : <QBPnL payload={activePnlPayload} entityType={profile.entityType} entityInsights={entityInsights} />}
               </div>
             </TabsContent>
 
             <TabsContent value="pnl_detail" className="mt-4">
               <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <ReportHeader company={companyName} title="Estado de Resultados — Detalle Completo" period={pnlPeriod} entityType={profile.entityType} taxForm={profile.taxForm} />
-                <QBPnLDetailed payload={cache.pnl?.payload} />
+                <ReportHeader company={companyName} title={periodLabel ? `Estado de Resultados Detalle — ${periodLabel}` : "Estado de Resultados — Detalle Completo"} period={pnlPeriod} entityType={profile.entityType} taxForm={profile.taxForm} />
+                {periodLoading ? <LoadingReport /> : <QBPnLDetailed payload={activePnlPayload} />}
               </div>
             </TabsContent>
 
             <TabsContent value="balance" className="mt-4">
               <div className="bg-white border border-slate-200 rounded-xl p-5">
-                <ReportHeader company={companyName} title="Balance General" entityType={profile.entityType} taxForm={profile.taxForm} />
-                <QBBalanceSheet payload={cache.balance_sheet?.payload} />
+                <ReportHeader company={companyName} title={periodLabel ? `Balance General — ${periodLabel}` : "Balance General"} entityType={profile.entityType} taxForm={profile.taxForm} />
+                {periodLoading ? <LoadingReport /> : <QBBalanceSheet payload={activeBsPayload} />}
               </div>
             </TabsContent>
 
@@ -394,6 +447,18 @@ function ReportHeader({
       </div>
       <h3 className="font-bold text-slate-800 text-base mt-0.5">{title}</h3>
       {period && <p className="text-xs text-slate-400 mt-0.5">Periodo: {period}</p>}
+    </div>
+  );
+}
+
+function LoadingReport() {
+  return (
+    <div className="flex items-center justify-center py-12 text-slate-400">
+      <svg className="w-5 h-5 animate-spin mr-2" fill="none" viewBox="0 0 24 24">
+        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+      </svg>
+      <span className="text-sm">Cargando reporte...</span>
     </div>
   );
 }
