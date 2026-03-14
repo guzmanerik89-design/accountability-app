@@ -48,11 +48,11 @@ interface Props {
 }
 
 const AGENTS = [
-  { key: "bookkeeping", label: "Bookkeeping", icon: "\u{1F4D2}", description: "Categorize & reconcile" },
-  { key: "tax_strategy", label: "Tax Strategy", icon: "\u{1F4B0}", description: "Deductions & savings" },
-  { key: "audit", label: "Audit", icon: "\u{1F50D}", description: "Compliance check" },
-  { key: "financial_reports", label: "Financial Reports", icon: "\u{1F4CA}", description: "P&L, Balance Sheet, KPIs" },
-  { key: "client_advisory", label: "Client Advisory", icon: "\u{1F4CB}", description: "Final advisory report" },
+  { key: "bookkeeping", label: "Bookkeeping", icon: "\u{1F4D2}", description: "Categorizing transactions & reconciling" },
+  { key: "tax_strategy", label: "Tax Strategy", icon: "\u{1F4B0}", description: "Analyzing deductions & savings" },
+  { key: "audit", label: "Audit & Adjustments", icon: "\u{1F50D}", description: "Reviewing compliance & creating entries" },
+  { key: "vendor_1099", label: "1099 Compliance", icon: "\u{1F4C4}", description: "Updating vendor 1099 tracking" },
+  { key: "client_advisory", label: "Client Advisory", icon: "\u{1F4CB}", description: "Generating advisory report" },
 ];
 
 const STATUS_STYLES: Record<string, string> = {
