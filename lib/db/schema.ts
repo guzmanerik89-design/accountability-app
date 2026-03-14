@@ -140,3 +140,43 @@ export type Billing = typeof billing.$inferSelect;
 export type NewBilling = typeof billing.$inferInsert;
 export type TaskStatus = "not_started" | "in_progress" | "needs_info" | "review" | "complete";
 export type TaskCategory = "accounting" | "tax";
+
+// ─── Agent System ────────────────────────────────────────────────────
+
+export interface AgentProgress {
+  status: "pending" | "running" | "completed" | "failed";
+  message?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
+export const agentRunStatusEnum = pgEnum("agent_run_status", [
+  "pending",
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const agentRuns = pgTable("agent_runs", {
+  id: serial("id").primaryKey(),
+  realmId: text("realm_id").notNull(),
+  clientName: text("client_name").notNull(),
+  status: agentRunStatusEnum("status").notNull().default("pending"),
+  progress: jsonb("progress").$type<Record<string, AgentProgress>>().default({}),
+  finalReport: text("final_report"),
+  error: text("error"),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const agentReports = pgTable("agent_reports", {
+  id: serial("id").primaryKey(),
+  runId: integer("run_id").references(() => agentRuns.id, { onDelete: "cascade" }).notNull(),
+  agentName: text("agent_name").notNull(),
+  output: text("output").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AgentRun = typeof agentRuns.$inferSelect;
+export type AgentReport = typeof agentReports.$inferSelect;

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { qbTokens, qbCache } from "@/lib/db/schema";
+import { cookies } from "next/headers";
 
-// Manually exchange auth code for tokens — avoids intuit-oauth CSRF state issues in serverless
 async function exchangeCodeForTokens(code: string) {
   const clientId = process.env.QB_CLIENT_ID!;
   const clientSecret = process.env.QB_CLIENT_SECRET!;
@@ -25,8 +25,10 @@ async function exchangeCodeForTokens(code: string) {
   });
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`QB token exchange failed ${res.status}: ${text}`);
+    const status = res.status;
+    // Don't leak response body to client
+    console.error("QB token exchange failed:", status, await res.text());
+    throw new Error(`QB token exchange failed (${status})`);
   }
 
   return res.json() as Promise<{
@@ -42,18 +44,32 @@ export async function GET(req: NextRequest) {
   const code = searchParams.get("code");
   const realmId = searchParams.get("realmId");
   const error = searchParams.get("error");
+  const state = searchParams.get("state");
 
-  // Intuit returned an error (user denied access, etc.)
+  // Validate CSRF state
+  const cookieStore = await cookies();
+  const savedState = cookieStore.get("qb_oauth_state")?.value;
+  cookieStore.delete("qb_oauth_state");
+
+  if (!state || !savedState || state !== savedState) {
+    console.error("QB OAuth CSRF state mismatch");
+    return NextResponse.redirect(new URL("/quickbooks?error=invalid_state", req.url));
+  }
+
   if (error || !code || !realmId) {
     console.error("QB OAuth callback error:", error ?? "missing code/realmId");
     return NextResponse.redirect(new URL(`/quickbooks?error=${encodeURIComponent(error ?? "missing_params")}`, req.url));
+  }
+
+  // Validate realmId format (numeric string)
+  if (!/^\d+$/.test(realmId)) {
+    return NextResponse.redirect(new URL("/quickbooks?error=invalid_realm", req.url));
   }
 
   try {
     const tokenData = await exchangeCodeForTokens(code);
     const expiresAt = Date.now() + tokenData.expires_in * 1000;
 
-    // Save tokens to DB
     await db
       .insert(qbTokens)
       .values({
@@ -72,7 +88,7 @@ export async function GET(req: NextRequest) {
         },
       });
 
-    // Auto-fetch company name so it shows immediately in the selector
+    // Auto-fetch company name (non-fatal)
     try {
       const QuickBooks = (await import("node-quickbooks")).default;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -104,14 +120,13 @@ export async function GET(req: NextRequest) {
           set: { payload: companyInfo as Record<string, unknown>, syncedAt: new Date() },
         });
     } catch (e) {
-      // Non-fatal — company name will show after first full sync
       console.warn("QB auto company fetch failed:", e);
     }
 
     return NextResponse.redirect(new URL("/quickbooks", req.url));
   } catch (error) {
     console.error("QB OAuth error:", error);
-    const msg = error instanceof Error ? error.message : String(error);
-    return NextResponse.redirect(new URL(`/quickbooks?error=${encodeURIComponent(msg)}`, req.url));
+    // Generic error message — don't leak token exchange details
+    return NextResponse.redirect(new URL("/quickbooks?error=connection_failed", req.url));
   }
 }

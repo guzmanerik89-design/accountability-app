@@ -3,15 +3,20 @@ import { db } from "@/lib/db";
 import { qbTokens, qbCache } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-// Called when a user disconnects from QuickBooks (also used as Intuit's Disconnect URL)
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const realmId = searchParams.get("realmId");
+// Changed from GET to POST to prevent CSRF attacks
+export async function POST(req: NextRequest) {
+  try {
+    const { realmId } = await req.json();
 
-  if (realmId) {
+    if (!realmId || typeof realmId !== "string" || !/^\d+$/.test(realmId)) {
+      return NextResponse.json({ error: "Invalid realmId" }, { status: 400 });
+    }
+
     await db.delete(qbCache).where(eq(qbCache.realmId, realmId));
     await db.delete(qbTokens).where(eq(qbTokens.realmId, realmId));
-  }
 
-  return NextResponse.redirect(new URL("/quickbooks", req.url));
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Failed to disconnect" }, { status: 500 });
+  }
 }

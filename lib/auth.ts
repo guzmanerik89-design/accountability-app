@@ -1,9 +1,13 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-const SECRET = new TextEncoder().encode(
-  process.env.NEXTAUTH_SECRET || "fallback-secret-change-in-production"
-);
+function getSecret() {
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret) throw new Error("NEXTAUTH_SECRET environment variable is required");
+  return new TextEncoder().encode(secret);
+}
+
+const SECRET = getSecret();
 
 const COOKIE_NAME = "accountpro_session";
 

@@ -37,8 +37,25 @@ export async function GET(req: NextRequest) {
   const endDate = searchParams.get("endDate");
   const method = searchParams.get("method") || "Accrual";
 
+  // Input validation
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  const allowedReports = ["pnl", "pnl_monthly", "balance_sheet", "trial_balance", "cash_flow"];
+  const allowedMethods = ["Accrual", "Cash"];
+
   if (!report || !startDate || !endDate) {
-    return NextResponse.json({ error: "Missing report, startDate, or endDate" }, { status: 400 });
+    return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
+  }
+  if (!allowedReports.includes(report)) {
+    return NextResponse.json({ error: "Invalid report type" }, { status: 400 });
+  }
+  if (!dateRegex.test(startDate) || !dateRegex.test(endDate)) {
+    return NextResponse.json({ error: "Invalid date format (use YYYY-MM-DD)" }, { status: 400 });
+  }
+  if (realmId && !/^\d+$/.test(realmId)) {
+    return NextResponse.json({ error: "Invalid realmId" }, { status: 400 });
+  }
+  if (!allowedMethods.includes(method)) {
+    return NextResponse.json({ error: "Invalid accounting method" }, { status: 400 });
   }
 
   try {
@@ -101,11 +118,11 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({ report, data });
       }
       default:
-        return NextResponse.json({ error: `Unknown report: ${report}` }, { status: 400 });
+        return NextResponse.json({ error: "Invalid report type" }, { status: 400 });
     }
   } catch (error: unknown) {
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : "QB error" },
+      { error: "Failed to generate report" },
       { status: 500 }
     );
   }
