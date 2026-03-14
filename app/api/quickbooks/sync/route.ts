@@ -99,6 +99,37 @@ export async function POST(req: NextRequest) {
       },
       { key: "vendors", fetch: () => qbCall(qb, "findVendors", [{ field: "Active", value: "true", operator: "=" }]) },
       { key: "customers", fetch: () => qbCall(qb, "findCustomers", [{ field: "Active", value: "true", operator: "=" }]) },
+      {
+        key: "trial_balance",
+        fetch: () =>
+          qbCall(qb, "reportTrialBalance", {
+            start_date: fiscalStart(),
+            end_date: today(),
+            accounting_method: "Accrual",
+          }),
+      },
+      {
+        key: "vendor_expenses",
+        fetch: () =>
+          qbCall(qb, "reportVendorExpenses", {
+            start_date: fiscalStart(),
+            end_date: today(),
+          }),
+      },
+      {
+        key: "aged_receivables",
+        fetch: () =>
+          qbCall(qb, "reportAgedReceivableDetail", {
+            date_macro: "Today",
+          }),
+      },
+      {
+        key: "aged_payables",
+        fetch: () =>
+          qbCall(qb, "reportAgedPayableDetail", {
+            date_macro: "Today",
+          }),
+      },
     ];
 
     const results = await Promise.allSettled(dataKeys.map((d) => d.fetch()));

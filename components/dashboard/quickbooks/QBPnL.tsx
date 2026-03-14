@@ -1,18 +1,95 @@
 "use client";
 import { parsePnLSummary, formatCurrency } from "@/lib/quickbooks/parsers";
+import type { EntityType, PnLEntityInsights } from "@/lib/quickbooks/parsers";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function QBPnL({ payload }: { payload: any }) {
+interface Props {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload: any;
+  entityType?: EntityType;
+  entityInsights?: PnLEntityInsights;
+}
+
+export function QBPnL({ payload, entityType, entityInsights }: Props) {
   if (!payload) return <EmptyCard label="P&L Report" />;
   const s = parsePnLSummary(payload);
 
-  const rows = [
+  const rows: Array<{
+    label: string;
+    value: number;
+    bold?: boolean;
+    sub?: boolean;
+    large?: boolean;
+    color: string;
+    extra?: string;
+    entityNote?: string;
+  }> = [
     { label: "Total Revenue", value: s.revenue, bold: true, color: "text-green-700" },
     { label: "Cost of Goods Sold", value: s.cogs, sub: true, color: "text-slate-600" },
-    { label: "Gross Profit", value: s.grossProfit, bold: true, color: s.grossProfit >= 0 ? "text-blue-700" : "text-red-700", extra: `${s.grossMarginPct.toFixed(1)}% margin` },
-    { label: "Operating Expenses", value: s.expenses, sub: true, color: "text-slate-600" },
-    { label: "Net Income", value: s.netIncome, bold: true, large: true, color: s.netIncome >= 0 ? "text-green-700" : "text-red-700" },
+    {
+      label: "Gross Profit",
+      value: s.grossProfit,
+      bold: true,
+      color: s.grossProfit >= 0 ? "text-blue-700" : "text-red-700",
+      extra: `${s.grossMarginPct.toFixed(1)}% margin`,
+    },
   ];
+
+  // Entity-specific line items before net income
+  if (entityInsights?.officerCompensation !== null && entityInsights?.officerCompensation !== undefined && entityInsights.officerCompensation > 0) {
+    rows.push({
+      label: "Officer Compensation",
+      value: entityInsights.officerCompensation,
+      sub: true,
+      color: "text-blue-600",
+      entityNote: entityType === "S-Corp" ? "Salario razonable requerido por IRS" : undefined,
+    });
+  }
+
+  if (entityInsights?.guaranteedPayments !== null && entityInsights?.guaranteedPayments !== undefined && entityInsights.guaranteedPayments > 0) {
+    rows.push({
+      label: "Guaranteed Payments to Partners",
+      value: entityInsights.guaranteedPayments,
+      sub: true,
+      color: "text-teal-600",
+      entityNote: "K-1 Box 4 — deducible para el partnership",
+    });
+  }
+
+  if (entityInsights?.payrollExpenses !== null && entityInsights?.payrollExpenses !== undefined && entityInsights.payrollExpenses > 0) {
+    rows.push({
+      label: "Payroll Expenses",
+      value: entityInsights.payrollExpenses,
+      sub: true,
+      color: "text-slate-600",
+    });
+  }
+
+  rows.push({ label: "Operating Expenses", value: s.expenses, sub: true, color: "text-slate-600" });
+  rows.push({
+    label: "Net Income",
+    value: s.netIncome,
+    bold: true,
+    large: true,
+    color: s.netIncome >= 0 ? "text-green-700" : "text-red-700",
+    entityNote: entityType === "Sole Proprietorship"
+      ? "Se reporta en Schedule C, línea 31"
+      : entityType === "S-Corp"
+      ? "Fluye a K-1 de accionistas"
+      : entityType === "Partnership"
+      ? "Se distribuye entre socios vía K-1"
+      : undefined,
+  });
+
+  // Owner draws at the bottom (not P&L item, but relevant context)
+  if (entityInsights?.ownerDraws !== null && entityInsights?.ownerDraws !== undefined && entityInsights.ownerDraws > 0) {
+    rows.push({
+      label: "Owner's Draws (Equity, no P&L)",
+      value: entityInsights.ownerDraws,
+      sub: true,
+      color: "text-amber-600",
+      entityNote: "No es gasto deducible — reducción de equity",
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -27,10 +104,15 @@ export function QBPnL({ payload }: { payload: any }) {
             key={r.label}
             className={`flex items-center justify-between py-2.5 px-4 rounded-lg ${r.large ? "bg-slate-100 mt-2" : r.sub ? "" : "bg-white border border-slate-100"}`}
           >
-            <span className={`text-sm ${r.bold ? "font-semibold text-slate-800" : "text-slate-500 pl-2"}`}>
-              {r.label}
-              {r.extra && <span className="text-xs text-slate-400 ml-2">({r.extra})</span>}
-            </span>
+            <div className="flex flex-col">
+              <span className={`text-sm ${r.bold ? "font-semibold text-slate-800" : "text-slate-500 pl-2"}`}>
+                {r.label}
+                {r.extra && <span className="text-xs text-slate-400 ml-2">({r.extra})</span>}
+              </span>
+              {r.entityNote && (
+                <span className="text-[10px] text-slate-400 pl-2 mt-0.5">{r.entityNote}</span>
+              )}
+            </div>
             <span className={`font-mono text-sm ${r.bold ? "font-bold" : ""} ${r.color}`}>
               {formatCurrency(r.value)}
             </span>
@@ -98,7 +180,7 @@ export function QBPnLDetailed({ payload }: { payload: any }) {
 function EmptyCard({ label }: { label: string }) {
   return (
     <div className="text-center py-8 text-slate-400 text-sm">
-      No {label} data yet — click <strong>Sync Now</strong> to load
+      No hay datos de {label} — haz clic en <strong>Sincronizar</strong>
     </div>
   );
 }
